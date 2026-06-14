@@ -1,0 +1,11 @@
+{
+  "name": "turbocargologistics",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Turbocargologistics — premium shipping site with database-backed shipment tracking.",
+  "dependencies": {
+    "@netlify/database": "*",
+    "@netlify/functions": "^5.3.0"
+  }
+}

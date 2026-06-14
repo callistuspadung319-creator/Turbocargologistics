@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Turbocargologistics - Premium Shipping Services</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(400px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .toast {
+            animation: slideIn 0.3s ease-out;
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-out;
+        }
+        .slide-up {
+            animation: slideUp 0.5s ease-out;
+        }
+        .chart-bar {
+            transition: all 0.3s ease;
+        }
+        .chart-bar:hover {
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const MenuIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>;
+        const CloseIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>;
+        const LogoutIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>;
+        const EyeIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>;
+        const EyeOffIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7" /></svg>;
+        const DownloadIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>;
+
+        // Turn an ISO timestamp into a friendly "x ago" label.
+        const timeAgo = (iso) => {
+            if (!iso) return '';
+            const then = new Date(iso).getTime();
+            if (Number.isNaN(then)) return '';
+            const secs = Math.max(0, Math.floor((Date.now() - then) / 1000));
+            if (secs < 60) return 'Just now';
+            const mins = Math.floor(secs / 60);
+            if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'} ago`;
+            const hours = Math.floor(mins / 60);
+            if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+            const days = Math.floor(hours / 24);
+            return `${days} day${days === 1 ? '' : 's'} ago`;
+        };
+
+        // Normalize a row from the API into the shape the UI expects.
+        const normalize = (s) => ({
+            ...s,
+            progress: Number(s.progress) || 0,
+            lastUpdate: timeAgo(s.created_at),
+            date: s.created_at ? new Date(s.created_at).toLocaleDateString() : '',
+        });
+
+        function Turbocargologistics() {
+            const [currentPage, setCurrentPage] = useState('home');
+            const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+            const [isAdmin, setIsAdmin] = useState(false);
+            const [adminPassword, setAdminPassword] = useState('');
+            const [showPassword, setShowPassword] = useState(false);
+            const [toast, setToast] = useState(null);
+            const [searchQuery, setSearchQuery] = useState('');
+            const [filterStatus, setFilterStatus] = useState('all');
+
+            const [shipments, setShipments] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [newShipment, setNewShipment] = useState({ id: '', weight: '', origin: '', destination: '', status: 'Processing' });
+
+            // Show toast notification
+            const showToast = (message, type = 'success') => {
+                setToast({ message, type });
+                setTimeout(() => setToast(null), 3000);
+            };
+
+            // Load shipments from the API on mount.
+            const loadShipments = async () => {
+                try {
+                    const res = await fetch('/api/shipments');
+                    if (!res.ok) throw new Error('Failed to load');
+                    const data = await res.json();
+                    setShipments(data.map(normalize));
+                } catch (err) {
+                    showToast('Could not load shipments', 'error');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            useEffect(() => {
+                loadShipments();
+            }, []);
+
+            const handleAdminLogin = (e) => {
+                e.preventDefault();
+                if (adminPassword === 'admin123') {
+                    setIsAdmin(true);
+                    setAdminPassword('');
+                    showToast('Admin access granted!', 'success');
+                } else {
+                    showToast('Invalid password', 'error');
+                }
+            };
+
+            const addShipment = async (e) => {
+                e.preventDefault();
+                if (!(newShipment.id && newShipment.weight && newShipment.origin && newShipment.destination)) {
+                    showToast('Please fill in all fields', 'error');
+                    return;
+                }
+                try {
+                    const res = await fetch('/api/shipments', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(newShipment),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) {
+                        showToast(data.error || 'Could not add shipment', 'error');
+                        return;
+                    }
+                    setShipments([normalize(data), ...shipments]);
+                    setNewShipment({ id: '', weight: '', origin: '', destination: '', status: 'Processing' });
+                    showToast(`Shipment ${data.id} added successfully!`, 'success');
+                } catch (err) {
+                    showToast('Could not add shipment', 'error');
+                }
+            };
+
+            const deleteShipment = async (id) => {
+                try {
+                    const res = await fetch(`/api/shipments?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+                    if (!res.ok) throw new Error('Failed');
+                    setShipments(shipments.filter(s => s.id !== id));
+                    showToast(`Shipment ${id} deleted`, 'success');
+                } catch (err) {
+                    showToast('Could not delete shipment', 'error');
+                }
+            };
+
+            const exportToCSV = () => {
+                const headers = ['ID', 'Status', 'Origin', 'Destination', 'Progress', 'Date'];
+                const rows = shipments.map(s => [s.id, s.status, s.origin, s.destination, s.progress + '%', s.date]);
+                const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'turbocargo_shipments.csv';
+                a.click();
+                showToast('Shipments exported to CSV', 'success');
+            };
+
+            const filteredShipments = shipments.filter(s => {
+                const matchesSearch = s.id.includes(searchQuery.toUpperCase()) ||
+                                     s.origin.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                     s.destination.toLowerCase().includes(searchQuery.toLowerCase());
+                const matchesStatus = filterStatus === 'all' || s.status === filterStatus;
+                return matchesSearch && matchesStatus;
+            });
+
+            const stats = {
+                total: shipments.length,
+                inTransit: shipments.filter(s => s.status === 'In Transit').length,
+                delivered: shipments.filter(s => s.status === 'Delivered').length,
+                processing: shipments.filter(s => s.status === 'Processing').length,
+            };
+
+            const Toast = () => {
+                if (!toast) return null;
+                const bgColor = toast.type === 'success' ? 'bg-green-600' : 'bg-red-600';
+                return (
+                    <div className={`toast fixed top-4 right-4 ${bgColor} text-white px-6 py-3 rounded-lg shadow-lg z-50`}>
+                        {toast.message}
+                    </div>
+                );
+            };
+
+            const NavBar = () => (
+                <nav className="sticky top-0 z-50 bg-white shadow-md border-b-4 border-red-600">
+                    <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-gradient-to-br from-red-600 to-red-700 rounded flex items-center justify-center font-bold text-white text-lg">
+                                TCL
+                            </div>
+                            <div>
+                                <span className="text-xl font-bold text-blue-900">Turbocargologistics</span>
+                                <p className="text-xs text-gray-600">Premium Shipping Services</p>
+                            </div>
+                        </div>
+
+                        <div className="hidden md:flex gap-8">
+                            {[
+                                { label: 'Home', page: 'home' },
+                                { label: 'Track', page: 'track' },
+                                { label: 'Rates', page: 'rates' },
+                                { label: 'Services', page: 'services' },
+                                { label: 'Contact', page: 'contact' },
+                            ].map(item => (
+                                <button
+                                    key={item.page}
+                                    onClick={() => setCurrentPage(item.page)}
+                                    className={`text-sm font-medium transition-colors ${
+                                        currentPage === item.page
+                                            ? 'text-red-600 border-b-2 border-red-600'
+                                            : 'text-gray-700 hover:text-blue-900'
+                                    }`}
+                                >
+                                    {item.label}
+                                </button>
+                            ))}
+                            <button
+                                onClick={() => setCurrentPage('admin')}
+                                className="text-sm font-medium text-gray-700 hover:text-blue-900"
+                            >
+                                Admin
+                            </button>
+                        </div>
+
+                        <button
+                            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                            className="md:hidden text-blue-900"
+                        >
+                            {mobileMenuOpen ? <CloseIcon /> : <MenuIcon />}
+                        </button>
+                    </div>
+
+                    {mobileMenuOpen && (
+                        <div className="md:hidden bg-gray-50 border-t p-4 space-y-2 animate-fadeIn">
+                            {[
+                                { label: 'Home', page: 'home' },
+                                { label: 'Track', page: 'track' },
+                                { label: 'Rates', page: 'rates' },
+                                { label: 'Services', page: 'services' },
+                                { label: 'Contact', page: 'contact' },
+                                { label: 'Admin', page: 'admin' },
+                            ].map(item => (
+                                <button
+                                    key={item.page}
+                                    onClick={() => {
+                                        setCurrentPage(item.page);
+                                        setMobileMenuOpen(false);
+                                    }}
+                                    className="w-full text-left px-4 py-2 text-gray-700 hover:text-white hover:bg-blue-900 rounded transition-colors"
+                                >
+                                    {item.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </nav>
+            );
+
+            const HomePage = () => (
+                <div className="bg-white min-h-screen">
+                    <section className="relative bg-gradient-to-r from-blue-900 to-blue-800 text-white py-32">
+                        <div className="absolute inset-0 opacity-10">
+                            <div className="absolute top-10 left-10 text-red-600 text-6xl opacity-20">📦</div>
+                            <div className="absolute bottom-10 right-10 text-red-600 text-6xl opacity-20">🚚</div>
+                        </div>
+                        <div className="relative max-w-7xl mx-auto px-4 text-center slide-up">
+                            <h1 className="text-5xl md:text-6xl font-bold mb-6">
+                                America's <span className="text-red-500">Trusted</span> Shipping Partner
+                            </h1>
+                            <p className="text-xl mb-8 max-w-2xl mx-auto leading-relaxed text-gray-100">
+                                Fast, reliable, and professional shipping services for businesses nationwide. Track your packages in real-time.
+                            </p>
+                            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                                <button
+                                    onClick={() => setCurrentPage('track')}
+                                    className="px-8 py-4 bg-red-600 hover:bg-red-700 text-white font-bold rounded transition-all transform hover:scale-105"
+                                >
+                                    Track Package
+                                </button>
+                                <button
+                                    onClick={() => setCurrentPage('rates')}
+                                    className="px-8 py-4 border-2 border-white text-white font-bold rounded hover:bg-white hover:text-blue-900 transition-all"
+                                >
+                                    Get Rates
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section className="max-w-7xl mx-auto px-4 py-20">
+                        <h2 className="text-3xl font-bold text-blue-900 mb-12 text-center">Why Choose Turbocargologistics</h2>
+                        <div className="grid md:grid-cols-3 gap-8">
+                            {[
+                                { icon: '📦', title: 'Secure Handling', desc: 'Your packages are handled with care' },
+                                { icon: '🚚', title: 'Fast Delivery', desc: 'Quick delivery to all 50 states' },
+                                { icon: '⏱️', title: 'Real-Time Tracking', desc: 'Know exactly where your package is' },
+                            ].map((item, i) => (
+                                <div
+                                    key={i}
+                                    className="bg-gray-50 border-2 border-gray-200 rounded-lg p-8 hover:shadow-lg hover:border-red-600 transition-all transform hover:scale-105"
+                                >
+                                    <div className="text-4xl mb-4">{item.icon}</div>
+                                    <h3 className="text-lg font-bold text-blue-900 mb-2">{item.title}</h3>
+                                    <p className="text-gray-700">{item.desc}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+
+                    <section className="bg-gray-100 py-16">
+                        <div className="max-w-7xl mx-auto px-4">
+                            <div className="grid md:grid-cols-4 gap-8 text-center">
+                                {[
+                                    { number: '50+', label: 'States Covered' },
+                                    { number: '1M+', label: 'Packages Shipped' },
+                                    { number: '99.8%', label: 'On-Time Delivery' },
+                                    { number: '24/7', label: 'Customer Support' },
+                                ].map((stat, i) => (
+                                    <div key={i}>
+                                        <p className="text-3xl font-bold text-red-600">{stat.number}</p>
+                                        <p className="text-gray-700 mt-2">{stat.label}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            );
+
+            const TrackPage = () => (
+                <div className="bg-gray-100 min-h-screen pt-8 p-4 fade-in">
+                    <div className="max-w-4xl mx-auto">
+                        <h1 className="text-4xl font-bold text-blue-900 mb-8">Track Your Shipment</h1>
+
+                        <div className="bg-white rounded-lg shadow-md p-8 mb-8 border-t-4 border-red-600">
+                            <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                                <input
+                                    type="text"
+                                    placeholder="Search by ID, origin, or destination..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="flex-1 px-4 py-3 border-2 border-gray-300 rounded text-gray-900 focus:border-red-600 focus:outline-none"
+                                />
+                                <select
+                                    value={filterStatus}
+                                    onChange={(e) => setFilterStatus(e.target.value)}
+                                    className="px-4 py-3 border-2 border-gray-300 rounded text-gray-900 focus:border-red-600 focus:outline-none"
+                                >
+                                    <option value="all">All Status</option>
+                                    <option value="Processing">Processing</option>
+                                    <option value="In Transit">In Transit</option>
+                                    <option value="Delivered">Delivered</option>
+                                </select>
+                            </div>
+                            <p className="text-sm text-gray-600">
+                                {loading ? 'Loading shipments…' : `Found ${filteredShipments.length} shipment(s)`}
+                            </p>
+                        </div>
+
+                        <div className="space-y-6">
+                            {filteredShipments.length > 0 ? (
+                                filteredShipments.map((shipment) => (
+                                    <div key={shipment.id} className="bg-white rounded-lg shadow-md p-6 border-l-4 border-red-600 slide-up">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div>
+                                                <h3 className="text-2xl font-bold text-blue-900">{shipment.id}</h3>
+                                                <p className="text-gray-600 text-sm mt-1">Updated: {shipment.lastUpdate}</p>
+                                            </div>
+                                            <span className={`px-4 py-2 rounded-full text-sm font-bold ${
+                                                shipment.status === 'Delivered'
+                                                    ? 'bg-green-100 text-green-800'
+                                                    : shipment.status === 'In Transit'
+                                                    ? 'bg-blue-100 text-blue-800'
+                                                    : 'bg-orange-100 text-orange-800'
+                                            }`}>
+                                                {shipment.status}
+                                            </span>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4 mb-6 pb-6 border-b-2 border-gray-200">
+                                            <div>
+                                                <p className="text-gray-600 text-sm mb-1 font-semibold">FROM</p>
+                                                <p className="text-gray-900 font-bold">{shipment.origin}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-gray-600 text-sm mb-1 font-semibold">TO</p>
+                                                <p className="text-gray-900 font-bold">{shipment.destination}</p>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <p className="text-gray-700 font-semibold">Delivery Progress</p>
+                                                <p className="text-red-600 font-bold">{shipment.progress}%</p>
+                                            </div>
+                                            <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden border-2 border-gray-300">
+                                                <div
+                                                    className="h-full bg-gradient-to-r from-red-600 to-red-500 chart-bar"
+                                                    style={{ width: `${shipment.progress}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="bg-white rounded-lg shadow-md p-8 text-center">
+                                    <p className="text-gray-600 text-lg">
+                                        {loading ? 'Loading shipments…' : 'No shipments found matching your search.'}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const RatesPage = () => {
+                const [rateCalc, setRateCalc] = useState({ weight: '', distance: '', service: 'standard' });
+                const calculateRate = () => {
+                    const w = parseFloat(rateCalc.weight) || 0;
+                    const d = parseFloat(rateCalc.distance) || 0;
+                    const baseRate = w * 0.5 + d * 0.01;
+                    const multiplier = rateCalc.service === 'express' ? 1.5 : rateCalc.service === 'overnight' ? 2 : 1;
+                    return (baseRate * multiplier).toFixed(2);
+                };
+
+                return (
+                    <div className="bg-gray-100 min-h-screen pt-8 p-4 fade-in">
+                        <div className="max-w-4xl mx-auto">
+                            <h1 className="text-4xl font-bold text-blue-900 mb-8">Shipping Rate Calculator</h1>
+
+                            <div className="grid md:grid-cols-2 gap-8">
+                                <div className="bg-white rounded-lg shadow-md p-8 border-t-4 border-blue-900 slide-up">
+                                    <h2 className="text-2xl font-bold text-blue-900 mb-6">Calculate Your Rate</h2>
+                                    <div className="space-y-5">
+                                        <div>
+                                            <label className="block text-gray-700 text-sm font-bold mb-2">Weight (lbs)</label>
+                                            <input
+                                                type="number"
+                                                value={rateCalc.weight}
+                                                onChange={(e) => setRateCalc({ ...rateCalc, weight: e.target.value })}
+                                                className="w-full px-4 py-2 border-2 border-gray-300 rounded text-gray-900 focus:border-red-600 focus:outline-none"
+                                                placeholder="Enter weight"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-gray-700 text-sm font-bold mb-2">Distance (miles)</label>
+                                            <input
+                                                type="number"
+                                                value={rateCalc.distance}
+                                                onChange={(e) => setRateCalc({ ...rateCalc, distance: e.target.value })}
+                                                className="w-full px-4 py-2 border-2 border-gray-300 rounded text-gray-900 focus:border-red-600 focus:outline-none"
+                                                placeholder="Enter distance"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-gray-700 text-sm font-bold mb-2">Service Type</label>
+                                            <select
+                                                value={rateCalc.service}
+                                                onChange={(e) => setRateCalc({ ...rateCalc, service: e.target.value })}
+                                                className="w-full px-4 py-2 border-2 border-gray-300 rounded text-gray-900 focus:border-red-600 focus:outline-none"
+                                            >
+                                                <option value="standard">Standard (5-7 days)</option>
+                                                <option value="express">Express (2-3 days)</option>
+                                                <option value="overnight">Overnight</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-red-50 rounded-lg shadow-md p-8 border-4 border-red-600 flex flex-col justify-center slide-up">
+                                    <p className="text-gray-700 text-sm mb-2 font-semibold">ESTIMATED SHIPPING COST</p>
+                                    <h2 className="text-6xl font-bold text-red-600 mb-4">
+                                        ${calculateRate()}
+                                    </h2>
+                                    <p className="text-gray-700">
+                                        {rateCalc.weight && rateCalc.distance ? 'Based on your shipment details' : 'Enter details to calculate'}
+                                    </p>
+                                    <button className="mt-8 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded transition-all transform hover:scale-105">
+                                        Request Quote
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const ServicesPage = () => (
+                <div className="bg-white min-h-screen pt-8 p-4 fade-in">
+                    <div className="max-w-6xl mx-auto">
+                        <h1 className="text-4xl font-bold text-blue-900 mb-4 text-center">Our Services</h1>
+                        <p className="text-gray-700 text-center mb-12">Comprehensive shipping solutions for every business need</p>
+
+                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {[
+                                { title: 'Ground Shipping', desc: 'Economical delivery within 5-7 business days', icon: '📦' },
+                                { title: 'Express Delivery', desc: 'Priority 2-3 day service nationwide', icon: '⚡' },
+                                { title: 'Overnight Service', desc: 'Next-business-day delivery available', icon: '🚀' },
+                                { title: 'International', desc: 'Service to major countries worldwide', icon: '🌍' },
+                                { title: 'Freight Service', desc: 'Heavy and oversized shipments handled', icon: '🏗️' },
+                                { title: 'Fulfillment', desc: 'Warehouse and logistics management', icon: '📊' },
+                            ].map((service, i) => (
+                                <div
+                                    key={i}
+                                    className="bg-gray-50 rounded-lg shadow-md p-6 border-l-4 border-red-600 hover:shadow-lg hover:scale-105 transition-all slide-up"
+                                >
+                                    <p className="text-4xl mb-4">{service.icon}</p>
+                                    <h3 className="text-lg font-bold text-blue-900 mb-2">{service.title}</h3>
+                                    <p className="text-gray-700 text-sm">{service.desc}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const ContactPage = () => (
+                <div className="bg-gray-100 min-h-screen pt-8 p-4 fade-in">
+                    <div className="max-w-2xl mx-auto">
+                        <h1 className="text-4xl font-bold text-blue-900 mb-4 text-center">Contact Us</h1>
+                        <p className="text-gray-700 text-center mb-12">We're here to help with all your shipping needs</p>
+
+                        <form onSubmit={(e) => { e.preventDefault(); showToast('Message sent successfully!'); }} className="space-y-6">
+                            <div className="bg-white rounded-lg shadow-md p-8 border-t-4 border-red-600 slide-up">
+                                <input
+                                    type="text"
+                                    placeholder="Your Name"
+                                    className="w-full px-4 py-3 border-2 border-gray-300 rounded text-gray-900 mb-4 focus:border-red-600 focus:outline-none"
+                                />
+                                <input
+                                    type="email"
+                                    placeholder="Your Email"
+                                    className="w-full px-4 py-3 border-2 border-gray-300 rounded text-gray-900 mb-4 focus:border-red-600 focus:outline-none"
+                                />
+                                <textarea
+                                    placeholder="Your Message"
+                                    rows="6"
+                                    className="w-full px-4 py-3 border-2 border-gray-300 rounded text-gray-900 focus:border-red-600 focus:outline-none"
+                                ></textarea>
+                                <button className="w-full mt-4 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded transition-all transform hover:scale-105">
+                                    Send Message
+                                </button>
+                            </div>
+                        </form>
+
+                        <div className="mt-12 grid md:grid-cols-2 gap-6">
+                            <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-red-600">
+                                <p className="text-gray-600 text-sm mb-2 font-semibold">EMAIL</p>
+                                <p className="text-blue-900 font-bold">support@turbocargologistics.com</p>
+                            </div>
+                            <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-900">
+                                <p className="text-gray-600 text-sm mb-2 font-semibold">PHONE</p>
+                                <p className="text-blue-900 font-bold">1-800-TURBOCARGO</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const AdminPage = () => {
+                if (!isAdmin) {
+                    return (
+                        <div className="bg-gray-100 min-h-screen pt-20 p-4 flex items-center justify-center fade-in">
+                            <div className="max-w-md w-full">
+                                <form onSubmit={handleAdminLogin} className="bg-white rounded-lg shadow-lg p-8 border-t-4 border-red-600 slide-up">
+                                    <h1 className="text-2xl font-bold text-blue-900 mb-6">Admin Access</h1>
+                                    <div className="relative mb-6">
+                                        <input
+                                            type={showPassword ? "text" : "password"}
+                                            value={adminPassword}
+                                            onChange={(e) => setAdminPassword(e.target.value)}
+                                            placeholder="Enter password"
+                                            className="w-full px-4 py-3 border-2 border-gray-300 rounded text-gray-900 focus:border-red-600 focus:outline-none pr-10"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute right-3 top-3 text-gray-600 hover:text-gray-900"
+                                        >
+                                            {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                                        </button>
+                                    </div>
+                                    <button className="w-full px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded transition-all transform hover:scale-105">
+                                        Login
+                                    </button>
+                                    <p className="text-gray-600 text-xs mt-4 text-center">Password: admin123</p>
+                                </form>
+                            </div>
+                        </div>
+                    );
+                }
+
+                return (
+                    <div className="bg-gray-100 min-h-screen pt-8 p-4 fade-in">
+                        <div className="max-w-6xl mx-auto">
+                            <div className="flex justify-between items-center mb-8 flex-wrap gap-4">
+                                <h1 className="text-4xl font-bold text-blue-900">Admin Dashboard</h1>
+                                <button
+                                    onClick={() => { setIsAdmin(false); setCurrentPage('home'); }}
+                                    className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-all font-bold"
+                                >
+                                    <LogoutIcon /> Logout
+                                </button>
+                            </div>
+
+                            <div className="grid md:grid-cols-4 gap-4 mb-8">
+                                {[
+                                    { label: 'Total Shipments', value: stats.total, color: 'bg-blue-600' },
+                                    { label: 'In Transit', value: stats.inTransit, color: 'bg-orange-600' },
+                                    { label: 'Delivered', value: stats.delivered, color: 'bg-green-600' },
+                                    { label: 'Processing', value: stats.processing, color: 'bg-yellow-600' },
+                                ].map((stat, i) => (
+                                    <div key={i} className="bg-white rounded-lg shadow-md p-4 border-t-4 border-red-600 slide-up">
+                                        <p className="text-gray-600 text-sm font-semibold">{stat.label}</p>
+                                        <p className="text-3xl font-bold text-blue-900 mt-2">{stat.value}</p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="mb-6">
+                                <button
+                                    onClick={exportToCSV}
+                                    className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-bold transition-all"
+                                >
+                                    <DownloadIcon /> Export to CSV
+                                </button>
+                            </div>
+
+                            <div className="grid lg:grid-cols-3 gap-8">
+                                <div className="lg:col-span-2">
+                                    <h2 className="text-2xl font-bold text-blue-900 mb-4">Active Shipments</h2>
+                                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                                        {shipments.length === 0 && (
+                                            <div className="bg-white rounded-lg shadow-md p-6 text-center text-gray-600">
+                                                {loading ? 'Loading shipments…' : 'No shipments yet. Add one to get started.'}
+                                            </div>
+                                        )}
+                                        {shipments.map((shipment) => (
+                                            <div key={shipment.id} className="bg-white rounded-lg shadow-md p-4 flex justify-between items-center border-l-4 border-red-600 slide-up">
+                                                <div className="flex-1">
+                                                    <p className="font-bold text-blue-900">{shipment.id}</p>
+                                                    <p className="text-gray-700 text-sm">{shipment.origin} → {shipment.destination}</p>
+                                                    <div className="w-full h-2 bg-gray-200 rounded-full mt-2 overflow-hidden">
+                                                        <div className="h-full bg-red-600 chart-bar" style={{ width: `${shipment.progress}%` }}></div>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => deleteShipment(shipment.id)}
+                                                    className="ml-4 px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700 transition-all font-bold"
+                                                >
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <h2 className="text-2xl font-bold text-blue-900 mb-4">Add Shipment</h2>
+                                    <form onSubmit={addShipment} className="space-y-3 bg-white rounded-lg shadow-md p-6 border-t-4 border-red-600 slide-up">
+                                        <input
+                                            type="text"
+                                            placeholder="Tracking ID"
+                                            value={newShipment.id}
+                                            onChange={(e) => setNewShipment({ ...newShipment, id: e.target.value })}
+                                            className="w-full px-3 py-2 border-2 border-gray-300 rounded text-gray-900 text-sm focus:border-red-600 focus:outline-none"
+                                        />
+                                        <input
+                                            type="text"
+                                            placeholder="Weight"
+                                            value={newShipment.weight}
+                                            onChange={(e) => setNewShipment({ ...newShipment, weight: e.target.value })}
+                                            className="w-full px-3 py-2 border-2 border-gray-300 rounded text-gray-900 text-sm focus:border-red-600 focus:outline-none"
+                                        />
+                                        <input
+                                            type="text"
+                                            placeholder="Origin"
+                                            value={newShipment.origin}
+                                            onChange={(e) => setNewShipment({ ...newShipment, origin: e.target.value })}
+                                            className="w-full px-3 py-2 border-2 border-gray-300 rounded text-gray-900 text-sm focus:border-red-600 focus:outline-none"
+                                        />
+                                        <input
+                                            type="text"
+                                            placeholder="Destination"
+                                            value={newShipment.destination}
+                                            onChange={(e) => setNewShipment({ ...newShipment, destination: e.target.value })}
+                                            className="w-full px-3 py-2 border-2 border-gray-300 rounded text-gray-900 text-sm focus:border-red-600 focus:outline-none"
+                                        />
+                                        <select
+                                            value={newShipment.status}
+                                            onChange={(e) => setNewShipment({ ...newShipment, status: e.target.value })}
+                                            className="w-full px-3 py-2 border-2 border-gray-300 rounded text-gray-900 text-sm focus:border-red-600 focus:outline-none"
+                                        >
+                                            <option value="Processing">Processing</option>
+                                            <option value="In Transit">In Transit</option>
+                                            <option value="Delivered">Delivered</option>
+                                        </select>
+                                        <button className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded text-sm transition-all transform hover:scale-105">
+                                            Add Shipment
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="min-h-screen bg-white">
+                    <Toast />
+                    <NavBar />
+
+                    {currentPage === 'home' && <HomePage />}
+                    {currentPage === 'track' && <TrackPage />}
+                    {currentPage === 'rates' && <RatesPage />}
+                    {currentPage === 'services' && <ServicesPage />}
+                    {currentPage === 'contact' && <ContactPage />}
+                    {currentPage === 'admin' && <AdminPage />}
+
+                    <footer className="bg-blue-900 text-white py-8 px-4 border-t-4 border-red-600">
+                        <div className="max-w-7xl mx-auto text-center">
+                            <p className="font-semibold">© 2024 Turbocargologistics. Premium Shipping Solutions Nationwide.</p>
+                        </div>
+                    </footer>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<Turbocargologistics />, document.getElementById('root'));
+    </script>
+</body>
+</html>
