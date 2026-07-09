@@ -1,11 +1,18 @@
 {
-  "name": "turbocargologistics",
-  "version": "1.0.0",
+  "name": "turbocargo-marketplace",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "Turbocargologistics — premium shipping site with database-backed shipment tracking.",
+  "description": "Mobile-first multi-seller marketplace with Stripe Checkout on Netlify.",
+  "scripts": {
+    "dev": "netlify dev --port 8889",
+    "seed": "node scripts/seed.mjs"
+  },
   "dependencies": {
     "@netlify/database": "*",
     "@netlify/functions": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
