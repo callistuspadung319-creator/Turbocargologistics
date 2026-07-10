@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
@@ -9,7 +9,7 @@ CREATE TABLE users (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE sessions (
+CREATE TABLE IF NOT EXISTS sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash TEXT NOT NULL UNIQUE,
@@ -17,7 +17,7 @@ CREATE TABLE sessions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE sellers (
+CREATE TABLE IF NOT EXISTS sellers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
   display_name TEXT NOT NULL,
@@ -29,7 +29,7 @@ CREATE TABLE sellers (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE listings (
+CREATE TABLE IF NOT EXISTS listings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   seller_id UUID NOT NULL REFERENCES sellers(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
@@ -45,7 +45,7 @@ CREATE TABLE listings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE listing_images (
+CREATE TABLE IF NOT EXISTS listing_images (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   listing_id UUID NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
   url TEXT NOT NULL,
@@ -53,7 +53,7 @@ CREATE TABLE listing_images (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE orders (
+CREATE TABLE IF NOT EXISTS orders (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   buyer_name TEXT NOT NULL,
   buyer_email TEXT NOT NULL,
@@ -73,7 +73,7 @@ CREATE TABLE orders (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE payments (
+CREATE TABLE IF NOT EXISTS payments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   order_id UUID NOT NULL UNIQUE REFERENCES orders(id) ON DELETE CASCADE,
   provider TEXT NOT NULL DEFAULT 'stripe',
@@ -86,7 +86,7 @@ CREATE TABLE payments (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE seller_payout_ledger (
+CREATE TABLE IF NOT EXISTS seller_payout_ledger (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   seller_id UUID NOT NULL REFERENCES sellers(id),
   order_id UUID NOT NULL UNIQUE REFERENCES orders(id),
@@ -100,16 +100,16 @@ CREATE TABLE seller_payout_ledger (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE admin_settings (
+CREATE TABLE IF NOT EXISTS admin_settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-INSERT INTO admin_settings (key, value) VALUES ('platform_fee_percent', '10');
+INSERT INTO admin_settings (key, value) VALUES ('platform_fee_percent', '10') ON CONFLICT(key) DO NOTHING;
 
-CREATE INDEX idx_listings_active ON listings(active, approved, created_at DESC);
-CREATE INDEX idx_listings_seller ON listings(seller_id);
-CREATE INDEX idx_orders_seller ON orders(seller_id, created_at DESC);
-CREATE INDEX idx_orders_payment ON orders(payment_status);
-CREATE INDEX idx_sessions_token ON sessions(token_hash);
+CREATE INDEX IF NOT EXISTS idx_listings_active ON listings(active, approved, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_listings_seller ON listings(seller_id);
+CREATE INDEX IF NOT EXISTS idx_orders_seller ON orders(seller_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_orders_payment ON orders(payment_status);
+CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash);
