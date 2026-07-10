@@ -1,16 +1,18 @@
 {
   "name": "turbocargo-marketplace",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
   "description": "Mobile-first multi-seller marketplace with Stripe Checkout on Netlify.",
   "scripts": {
     "dev": "netlify dev --port 8889",
-    "seed": "node scripts/seed.mjs"
+    "migrate": "node scripts/migrate.mjs",
+    "seed": "node scripts/seed.mjs",
+    "build": "npm run migrate"
   },
   "dependencies": {
-    "@netlify/database": "*",
-    "@netlify/functions": "^5.3.0"
+    "@netlify/functions": "^5.3.0",
+    "postgres": "^3.4.7"
   },
   "engines": {
     "node": ">=20"
