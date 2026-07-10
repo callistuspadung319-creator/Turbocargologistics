@@ -10,10 +10,17 @@ export default async () => {
     await db.sql`SELECT id FROM listings LIMIT 1`;
     return Response.json({ ok: true, database: 'netlify', schema: 'ready' });
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     console.error('Netlify Database readiness check failed:', error);
     return Response.json(
-      { ok: false, database: 'netlify', schema: 'not-ready' },
-      { status: 503 }
+      {
+        ok: false,
+        database: 'netlify',
+        schema: 'not-ready',
+        error: message,
+        databaseUrlPresent: Boolean(process.env.DATABASE_URL)
+      },
+      { status: 503, headers: { 'Cache-Control': 'no-store' } }
     );
   }
 };
