@@ -1,6 +1,6 @@
 import type { Config } from '@netlify/functions';
-import { getDatabase } from '@netlify/database';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { getMarketplaceDatabase } from './_database';
 
 function validSignature(payload:string,header:string,secret:string){
   const parts=Object.fromEntries(header.split(',').map(x=>x.split('=')));
@@ -16,7 +16,7 @@ export default async(req:Request)=>{
   if(!secret)return Response.json({error:'Webhook secret missing'},{status:503});
   const raw=await req.text();
   if(!validSignature(raw,req.headers.get('stripe-signature')||'',secret))return Response.json({error:'Invalid signature'},{status:400});
-  const event=JSON.parse(raw); const db=getDatabase(); const obj=event.data?.object||{}; const orderId=obj.metadata?.order_id||obj.client_reference_id;
+  const event=JSON.parse(raw); const db=getMarketplaceDatabase(); const obj=event.data?.object||{}; const orderId=obj.metadata?.order_id||obj.client_reference_id;
   try{
     if(event.type==='checkout.session.completed'&&orderId){
       const rows=await db.sql`UPDATE orders SET payment_status='paid',stripe_payment_id=${String(obj.payment_intent||'')},updated_at=NOW() WHERE id=${orderId} AND payment_status<>'paid' RETURNING *`;
