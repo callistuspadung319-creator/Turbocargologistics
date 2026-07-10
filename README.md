@@ -18,10 +18,10 @@ Set these in Netlify before deploying:
 DATABASE_URL=
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
-PUBLIC_APP_URL=https://your-domain.example
+PUBLIC_APP_URL=https://turbocargologistics.online
 OWNER_EMAIL=owner@example.com
 RESEND_API_KEY=
-PLATFORM_FEE_PERCENT=15
+PLATFORM_FEE_PERCENT=10
 SEED_ADMIN_PASSWORD=change-this-before-seeding
 ```
 
@@ -29,13 +29,13 @@ SEED_ADMIN_PASSWORD=change-this-before-seeding
 
 ## Database
 
-Marketplace tables are defined in:
+The clean marketplace schema is defined in:
 
 ```text
-netlify/database/migrations/002_marketplace.sql
+netlify/database/migrations/20260709000000_marketplace.sql
 ```
 
-The migration creates users, sessions, sellers, listings, listing images, orders, payments, seller payout ledger entries, and admin settings.
+The migration creates users, sessions, sellers, listings, listing images, orders, payments, seller payout ledger entries, and admin settings. The default platform fee is 10%.
 
 Run the idempotent seed script after the database is available:
 
@@ -68,7 +68,7 @@ Open `http://localhost:8889`.
 2. Create a Stripe webhook endpoint pointing to:
 
 ```text
-https://YOUR_DOMAIN/api/stripe/webhook
+https://turbocargologistics.online/api/stripe/webhook
 ```
 
 3. Subscribe the endpoint to:
@@ -111,8 +111,9 @@ All admin paths load the protected admin dashboard. Role checks are enforced by 
 
 ## Production checklist
 
-- Apply the database migration.
+- Attach a new empty Netlify Database.
 - Configure all required environment variables.
+- Deploy the `main` branch.
 - Run the seed script once and replace seed passwords.
 - Register and test the Stripe webhook.
 - Complete a Stripe test-mode purchase.
@@ -124,3 +125,5 @@ All admin paths load the protected admin dashboard. Role checks are enforced by 
 ## Security notes
 
 The former browser-side `admin123` password flow is no longer used. Passwords are PBKDF2-hashed, sessions are stored server-side, cookies are HTTP-only and secure, and owner access is controlled by `OWNER_EMAIL`.
+
+Deployment reset marker: 2026-07-10 clean marketplace database.
