@@ -1,8 +1,5 @@
--- Historical Netlify Database seed migration restored because it is already
--- recorded as applied in production. Keep this file and migration name intact.
-INSERT INTO shipments (id, status, origin, destination, weight, progress)
-VALUES
-  ('TCG-2026-987654', 'In Transit', 'Los Angeles, CA', 'New York, NY', '24 kg', 65),
-  ('TCG-2026-654321', 'Processing', 'Houston, TX', 'Miami, FL', '12 kg', 15),
-  ('TCG-2026-456789', 'Delivered', 'Chicago, IL', 'Seattle, WA', '18 kg', 100)
-ON CONFLICT (id) DO NOTHING;
+-- Seed a few demo shipments so the site is populated on first load.
+INSERT INTO shipments (id, status, origin, destination, weight, progress, created_at) VALUES
+  ('TCL001234', 'In Transit', 'New York, NY',  'Los Angeles, CA', '12 lbs', 65,  NOW() - INTERVAL '2 hours'),
+  ('TCL001235', 'Delivered',  'Chicago, IL',   'Miami, FL',       '5 lbs',  100, NOW() - INTERVAL '1 day'),
+  ('TCL001236', 'Processing', 'Boston, MA',    'Seattle, WA',     '8 lbs',  15,  NOW());
