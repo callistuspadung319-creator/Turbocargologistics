@@ -1,7 +1,7 @@
 import type { Config } from '@netlify/functions';
-import { getDatabase } from '@netlify/database';
 import { createHash, pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { ensureMarketplaceSchema } from './_ensure-schema';
+import { getMarketplaceDatabase } from './_database';
 
 const json=(data:unknown,status=200,headers:Record<string,string>={})=>Response.json(data,{status,headers});
 const slugify=(v:string)=>v.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
@@ -11,15 +11,15 @@ const verifyPassword=(p:string,stored:string)=>{const [s,h]=stored.split(':'); i
 const cookie=(token:string,maxAge=604800)=>`market_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 
 async function body(req:Request){try{return await req.json() as Record<string,any>}catch{return {}}}
-async function currentUser(req:Request){const db=getDatabase(); const raw=req.headers.get('cookie')||''; const token=raw.match(/(?:^|; )market_session=([^;]+)/)?.[1]; if(!token)return null; const rows=await db.sql`SELECT u.id,u.email,u.role,s.id AS seller_id,s.username,s.display_name FROM sessions x JOIN users u ON u.id=x.user_id LEFT JOIN sellers s ON s.user_id=u.id WHERE x.token_hash=${hashToken(token)} AND x.expires_at>NOW()`; return rows[0]||null}
+async function currentUser(req:Request){const db=getMarketplaceDatabase(); const raw=req.headers.get('cookie')||''; const token=raw.match(/(?:^|; )market_session=([^;]+)/)?.[1]; if(!token)return null; const rows=await db.sql`SELECT u.id,u.email,u.role,s.id AS seller_id,s.username,s.display_name FROM sessions x JOIN users u ON u.id=x.user_id LEFT JOIN sellers s ON s.user_id=u.id WHERE x.token_hash=${hashToken(token)} AND x.expires_at>NOW()`; return rows[0]||null}
 async function requireRole(req:Request,roles:string[]){const u=await currentUser(req); if(!u||!roles.includes(u.role))return null; return u}
 async function sendEmail(to:string,subject:string,html:string){const key=process.env.RESEND_API_KEY; if(!key){console.warn('RESEND_API_KEY missing; email skipped');return} try{await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({from:'Marketplace <orders@'+new URL(process.env.PUBLIC_APP_URL||'https://example.com').hostname+'>',to:[to],subject,html})})}catch(e){console.warn('Email failed',e)}}
 
 export default async(req:Request)=>{const url=new URL(req.url); const p=url.pathname.replace(/^\/api\/marketplace/,'')||'/';
  try{
   await ensureMarketplaceSchema();
-  const db=getDatabase();
-  if(req.method==='GET'&&p==='/health')return json({ok:true,database:'netlify',schema:'ready'});
+  const db=getMarketplaceDatabase();
+  if(req.method==='GET'&&p==='/health')return json({ok:true,database:'netlify',schema:'ready',connection:'available'});
   if(req.method==='GET'&&p==='/me')return json({user:await currentUser(req)});
   if(req.method==='POST'&&p==='/register'){const b=await body(req); const email=String(b.email||'').trim().toLowerCase(); const password=String(b.password||''); const username=slugify(String(b.username||'')); const display=String(b.displayName||'').trim(); if(!email||password.length<8||!username||!display)return json({error:'Valid email, 8+ character password, display name and username are required'},400); const role=email===String(process.env.OWNER_EMAIL||'').toLowerCase()?'admin':'seller'; try{const [u]=await db.sql`INSERT INTO users(email,password_hash,role) VALUES(${email},${hashPassword(password)},${role}) RETURNING id,email,role`; await db.sql`INSERT INTO sellers(user_id,display_name,username,description) VALUES(${u.id},${display},${username},${String(b.description||'')})`; const token=randomBytes(32).toString('hex'); await db.sql`INSERT INTO sessions(user_id,token_hash,expires_at) VALUES(${u.id},${hashToken(token)},NOW()+INTERVAL '7 days')`; return json({user:u},201,{'Set-Cookie':cookie(token)})}catch(e:any){console.error('Registration failed',e);return json({error:e?.code==='23505'?'Email or seller username already exists':'Registration failed',detail:e?.message||String(e)},e?.code==='23505'?409:500)}}
   if(req.method==='POST'&&p==='/login'){const b=await body(req); const email=String(b.email||'').trim().toLowerCase(); const rows=await db.sql`SELECT * FROM users WHERE email=${email}`; const u=rows[0]; if(!u||!verifyPassword(String(b.password||''),u.password_hash))return json({error:'Invalid email or password'},401); if(email===String(process.env.OWNER_EMAIL||'').toLowerCase()&&u.role!=='admin')await db.sql`UPDATE users SET role='admin',updated_at=NOW() WHERE id=${u.id}`; const token=randomBytes(32).toString('hex'); await db.sql`INSERT INTO sessions(user_id,token_hash,expires_at) VALUES(${u.id},${hashToken(token)},NOW()+INTERVAL '7 days')`; return json({ok:true},200,{'Set-Cookie':cookie(token)})}
@@ -36,6 +36,6 @@ export default async(req:Request)=>{const url=new URL(req.url); const p=url.path
   if(req.method==='PATCH'&&p.startsWith('/admin/payouts/')){if(!await requireRole(req,['admin']))return json({error:'Admin access required'},403); const id=p.split('/')[3]; await db.sql`UPDATE seller_payout_ledger SET status='paid',paid_at=NOW(),updated_at=NOW() WHERE id=${id}`; return json({ok:true})}
   if(req.method==='PUT'&&p==='/admin/settings'){if(!await requireRole(req,['admin']))return json({error:'Admin access required'},403); const b=await body(req),v=String(Math.min(50,Math.max(0,Number(b.platformFeePercent||10)))); await db.sql`INSERT INTO admin_settings(key,value,updated_at) VALUES('platform_fee_percent',${v},NOW()) ON CONFLICT(key) DO UPDATE SET value=${v},updated_at=NOW()`; return json({ok:true,value:v})}
   return json({error:'Not found'},404);
- }catch(e:any){console.error('Marketplace error',e);return json({error:'Marketplace server error',detail:e?.message||String(e),databaseUrlPresent:Boolean(process.env.DATABASE_URL)},500)}};
+ }catch(e:any){console.error('Marketplace error',e);return json({error:'Marketplace server error',detail:e?.message||String(e),databaseConnectionPresent:Boolean(process.env.DATABASE_URL||process.env.NETLIFY_DB_URL||process.env.NETLIFY_DATABASE_URL)},500)}};
 
 export const config:Config={path:['/api/marketplace','/api/marketplace/*']};
