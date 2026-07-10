@@ -5,6 +5,31 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
+# Dedicated seller pages must be resolved before the SPA fallback.
+[[redirects]]
+  from = "/sell"
+  to = "/sell/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/sell/"
+  to = "/sell/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/seller/dashboard"
+  to = "/seller/dashboard/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/seller/dashboard/"
+  to = "/seller/dashboard/index.html"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
