@@ -1,8 +1,10 @@
 import type { Config } from '@netlify/functions';
 import { getDatabase } from '@netlify/database';
+import { ensureMarketplaceSchema } from './_ensure-schema';
 
 export default async () => {
   try {
+    await ensureMarketplaceSchema();
     const db = getDatabase();
     await db.sql`SELECT id FROM users LIMIT 1`;
     await db.sql`SELECT id FROM listings LIMIT 1`;
