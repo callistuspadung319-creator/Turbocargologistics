@@ -1,13 +1,14 @@
 import { getDatabase } from '@netlify/database';
 
 let ready: Promise<void> | null = null;
+const UUID_DEFAULT = `(md5(random()::text || clock_timestamp()::text)::uuid)`;
 
 export function ensureMarketplaceSchema() {
   if (ready) return ready;
   ready = (async () => {
     const db = getDatabase();
     await db.sql`CREATE TABLE IF NOT EXISTS users (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      id UUID PRIMARY KEY DEFAULT (md5(random()::text || clock_timestamp()::text)::uuid),
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'buyer' CHECK (role IN ('buyer','seller','admin')),
@@ -15,14 +16,14 @@ export function ensureMarketplaceSchema() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`;
     await db.sql`CREATE TABLE IF NOT EXISTS sessions (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      id UUID PRIMARY KEY DEFAULT (md5(random()::text || clock_timestamp()::text)::uuid),
       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       token_hash TEXT NOT NULL UNIQUE,
       expires_at TIMESTAMPTZ NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`;
     await db.sql`CREATE TABLE IF NOT EXISTS sellers (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      id UUID PRIMARY KEY DEFAULT (md5(random()::text || clock_timestamp()::text)::uuid),
       user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
       display_name TEXT NOT NULL,
       username TEXT NOT NULL UNIQUE,
@@ -33,7 +34,7 @@ export function ensureMarketplaceSchema() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`;
     await db.sql`CREATE TABLE IF NOT EXISTS listings (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      id UUID PRIMARY KEY DEFAULT (md5(random()::text || clock_timestamp()::text)::uuid),
       seller_id UUID NOT NULL REFERENCES sellers(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
       slug TEXT NOT NULL UNIQUE,
@@ -48,14 +49,14 @@ export function ensureMarketplaceSchema() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`;
     await db.sql`CREATE TABLE IF NOT EXISTS listing_images (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      id UUID PRIMARY KEY DEFAULT (md5(random()::text || clock_timestamp()::text)::uuid),
       listing_id UUID NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
       url TEXT NOT NULL,
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`;
     await db.sql`CREATE TABLE IF NOT EXISTS orders (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      id UUID PRIMARY KEY DEFAULT (md5(random()::text || clock_timestamp()::text)::uuid),
       buyer_name TEXT NOT NULL,
       buyer_email TEXT NOT NULL,
       buyer_phone TEXT,
@@ -74,7 +75,7 @@ export function ensureMarketplaceSchema() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`;
     await db.sql`CREATE TABLE IF NOT EXISTS payments (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      id UUID PRIMARY KEY DEFAULT (md5(random()::text || clock_timestamp()::text)::uuid),
       order_id UUID NOT NULL UNIQUE REFERENCES orders(id) ON DELETE CASCADE,
       provider TEXT NOT NULL DEFAULT 'stripe',
       provider_session_id TEXT,
@@ -86,7 +87,7 @@ export function ensureMarketplaceSchema() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`;
     await db.sql`CREATE TABLE IF NOT EXISTS seller_payout_ledger (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      id UUID PRIMARY KEY DEFAULT (md5(random()::text || clock_timestamp()::text)::uuid),
       seller_id UUID NOT NULL REFERENCES sellers(id),
       order_id UUID NOT NULL UNIQUE REFERENCES orders(id),
       gross_cents INTEGER NOT NULL,
