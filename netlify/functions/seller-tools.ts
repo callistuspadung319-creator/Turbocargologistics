@@ -42,13 +42,58 @@ async function ensureSeller(user:any){
 
 async function parseBody(req:Request){try{return await req.json() as Record<string,any>}catch{return {}}}
 
-function summarizeSales(query:string,sales:any[],source:string){
+function summarizeSales(query:string,sales:any[],source:string,extra:Record<string,unknown>={}){
   const prices=sales.map(x=>Number(x.price_cents)).filter(Number.isFinite).sort((a,b)=>a-b);
   const average=Math.round(prices.reduce((a,b)=>a+b,0)/prices.length);
-  return {query,count:prices.length,low:prices[0],average,high:prices[prices.length-1],lastSale:Number(sales[0].price_cents),lastSaleDate:sales[0].created_at,sales,source,suggestedPrice:average};
+  return {query,count:prices.length,low:prices[0],average,high:prices[prices.length-1],lastSale:Number(sales[0].price_cents),lastSaleDate:sales[0].created_at,sales,source,suggestedPrice:average,...extra};
 }
 
-async function fetchEbaySoldComps(query:string){
+function decodeHtml(value:string){
+  return value
+    .replace(/&amp;/g,'&')
+    .replace(/&quot;/g,'"')
+    .replace(/&#x27;|&#39;/g,"'")
+    .replace(/&lt;/g,'<')
+    .replace(/&gt;/g,'>')
+    .replace(/<[^>]+>/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
+function ebaySoldSearchUrl(query:string){
+  const p=new URLSearchParams({_nkw:query,LH_Sold:'1',LH_Complete:'1',_sop:'13',rt:'nc'});
+  return `https://www.ebay.com/sch/i.html?${p.toString()}`;
+}
+
+async function fetchPublicEbaySoldComps(query:string){
+  const searchUrl=ebaySoldSearchUrl(query);
+  const response=await fetch(searchUrl,{
+    headers:{
+      'User-Agent':'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1',
+      'Accept':'text/html,application/xhtml+xml',
+      'Accept-Language':'en-US,en;q=0.9'
+    },
+    redirect:'follow',
+    signal:AbortSignal.timeout(10000)
+  });
+  if(!response.ok)throw new Error(`Public sold search failed (${response.status})`);
+  const html=await response.text();
+  const blocks=html.split(/<li[^>]+class="[^"]*s-item[^"]*"[^>]*>/i).slice(1,41);
+  const sales:any[]=[];
+  for(const block of blocks){
+    const titleRaw=block.match(/class="s-item__title"[^>]*>([\s\S]*?)<\/[^>]+>/i)?.[1]||'';
+    const title=decodeHtml(titleRaw).replace(/^New Listing\s*/i,'');
+    const priceRaw=decodeHtml(block.match(/class="s-item__price"[^>]*>([\s\S]*?)<\/span>/i)?.[1]||'');
+    const href=decodeHtml(block.match(/class="s-item__link"[^>]+href="([^"]+)"/i)?.[1]||'');
+    const date=decodeHtml(block.match(/class="s-item__ended-date"[^>]*>([\s\S]*?)<\//i)?.[1]||'');
+    const amount=Number((priceRaw.match(/\$([\d,]+(?:\.\d{1,2})?)/)||[])[1]?.replace(/,/g,''));
+    if(!title||/^Shop on eBay$/i.test(title)||!amount||!Number.isFinite(amount))continue;
+    sales.push({title,price_cents:Math.round(amount*100),item_price_cents:Math.round(amount*100),shipping_cents:0,created_at:date||null,url:href||searchUrl,condition:null});
+  }
+  return {sales,searchUrl};
+}
+
+async function fetchEbayApiSoldComps(query:string){
   const appId=process.env.EBAY_APP_ID||process.env.EBAY_CLIENT_ID;
   if(!appId)return {configured:false,sales:[] as any[],error:'EBAY_APP_ID is not configured'};
   const params=new URLSearchParams({
@@ -62,19 +107,12 @@ async function fetchEbaySoldComps(query:string){
     'paginationInput.entriesPerPage':'30',
     'sortOrder':'EndTimeSoonest',
     'itemFilter(0).name':'SoldItemsOnly',
-    'itemFilter(0).value':'true',
-    'itemFilter(1).name':'Condition',
-    'itemFilter(1).value':'Used'
+    'itemFilter(0).value':'true'
   });
   const response=await fetch(`https://svcs.ebay.com/services/search/FindingService/v1?${params.toString()}`,{headers:{Accept:'application/json'}});
   const data=await response.json() as any;
   if(!response.ok)throw new Error(`eBay comps request failed (${response.status})`);
   const root=data?.findCompletedItemsResponse?.[0];
-  const ack=String(root?.ack?.[0]||'');
-  if(ack&&!/success|warning/i.test(ack)){
-    const message=root?.errorMessage?.[0]?.error?.[0]?.message?.[0]||'eBay completed listings request failed';
-    throw new Error(String(message));
-  }
   const items=root?.searchResult?.[0]?.item||[];
   const sales=items.flatMap((item:any)=>{
     const sellingState=String(item?.sellingStatus?.[0]?.sellingState?.[0]||'');
@@ -82,16 +120,7 @@ async function fetchEbaySoldComps(query:string){
     const shipping=Number(item?.shippingInfo?.[0]?.shippingServiceCost?.[0]?.__value__||0);
     const currency=String(item?.sellingStatus?.[0]?.currentPrice?.[0]?.['@currencyId']||'USD');
     if(sellingState!=='EndedWithSales'||!rawPrice||currency!=='USD')return [];
-    return [{
-      title:String(item?.title?.[0]||''),
-      price_cents:Math.round((rawPrice+shipping)*100),
-      item_price_cents:Math.round(rawPrice*100),
-      shipping_cents:Math.round(shipping*100),
-      created_at:item?.listingInfo?.[0]?.endTime?.[0]||null,
-      url:item?.viewItemURL?.[0]||null,
-      itemId:item?.itemId?.[0]||null,
-      condition:item?.condition?.[0]?.conditionDisplayName?.[0]||null
-    }];
+    return [{title:String(item?.title?.[0]||''),price_cents:Math.round((rawPrice+shipping)*100),item_price_cents:Math.round(rawPrice*100),shipping_cents:Math.round(shipping*100),created_at:item?.listingInfo?.[0]?.endTime?.[0]||null,url:item?.viewItemURL?.[0]||null,itemId:item?.itemId?.[0]||null,condition:item?.condition?.[0]?.conditionDisplayName?.[0]||null}];
   }).sort((a:any,b:any)=>new Date(b.created_at||0).getTime()-new Date(a.created_at||0).getTime());
   return {configured:true,sales,error:null};
 }
@@ -122,20 +151,23 @@ export default async(req:Request)=>{
       const b=await parseBody(req);
       const q=String(b.query||b.title||'').trim();
       if(q.length<3)return json({query:q,count:0,sales:[],message:'Enter at least 3 characters'});
+      const searchUrl=ebaySoldSearchUrl(q);
 
       try{
-        const ebay=await fetchEbaySoldComps(q);
-        if(ebay.sales.length)return json(summarizeSales(q,ebay.sales,'eBay recent sold listings'));
-        if(ebay.configured)return json({query:q,count:0,sales:[],source:'eBay recent sold listings',message:'No matching recent eBay sold listings were found. Try removing extra words from the title.'});
-      }catch(e:any){
-        console.error('eBay comps failed',e);
-      }
+        const ebay=await fetchEbayApiSoldComps(q);
+        if(ebay.sales.length)return json(summarizeSales(q,ebay.sales,'eBay recent sold listings',{searchUrl}));
+      }catch(e:any){console.warn('eBay API comps failed',e?.message||e)}
+
+      try{
+        const publicComps=await fetchPublicEbaySoldComps(q);
+        if(publicComps.sales.length)return json(summarizeSales(q,publicComps.sales,'eBay public sold/completed listings',{searchUrl:publicComps.searchUrl,unofficial:true}));
+      }catch(e:any){console.warn('Public eBay sold search failed',e?.message||e)}
 
       const like=`%${q}%`;
       const sales=await db.sql`SELECT o.item_price_cents price_cents,o.quantity,o.created_at,l.title,NULL::text url FROM orders o JOIN listings l ON l.id=o.listing_id WHERE o.payment_status='paid' AND l.title ILIKE ${like} ORDER BY o.created_at DESC LIMIT 25`;
-      if(sales.length)return json({...summarizeSales(q,sales,'TurboMarket verified completed sales'),warning:'External eBay comps were unavailable, so internal completed sales are shown.'});
+      if(sales.length)return json({...summarizeSales(q,sales,'TurboMarket verified completed sales',{searchUrl}),warning:'External sold results could not be parsed, so internal completed sales are shown.'});
 
-      return json({query:q,count:0,sales:[],source:'Recent sold listings',requiresConfiguration:!Boolean(process.env.EBAY_APP_ID||process.env.EBAY_CLIENT_ID),message:(process.env.EBAY_APP_ID||process.env.EBAY_CLIENT_ID)?'No matching recent sold listings were found. Try a shorter title.':'Recent external comps require EBAY_APP_ID in Netlify environment variables.'});
+      return json({query:q,count:0,sales:[],source:'eBay sold/completed search',searchUrl,message:'Open the sold-search link to view the latest completed listings. eBay did not expose prices to the automatic parser on this request.'});
     }
 
     if(req.method==='POST'&&path==='/listings'){
