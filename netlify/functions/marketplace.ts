@@ -16,11 +16,40 @@ async function currentUser(req:Request){const db=getMarketplaceDatabase();const 
 async function requireRole(req:Request,roles:string[]){const u=await currentUser(req);return u&&roles.includes(u.role)?u:null}
 async function sendEmail(to:string,subject:string,html:string){const key=process.env.RESEND_API_KEY;if(!key){console.warn('RESEND_API_KEY missing; email skipped');return}try{await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({from:'Marketplace <orders@'+new URL(process.env.PUBLIC_APP_URL||'https://example.com').hostname+'>',to:[to],subject,html})})}catch(e){console.warn('Email failed',e)}}
 
+async function recoverLegacyAbandonedCheckouts(db:any){
+  try{
+    await db.sql`
+      WITH stale AS (
+        UPDATE orders o
+        SET payment_status='failed',updated_at=NOW()
+        WHERE o.payment_status='pending'
+          AND o.created_at < NOW()-INTERVAL '2 minutes'
+          AND EXISTS (
+            SELECT 1 FROM listings l
+            WHERE l.id=o.listing_id AND l.quantity=0 AND l.active=FALSE
+          )
+        RETURNING o.id,o.listing_id,o.quantity
+      ), totals AS (
+        SELECT listing_id,SUM(quantity)::int quantity
+        FROM stale GROUP BY listing_id
+      ), restored AS (
+        UPDATE listings l
+        SET quantity=l.quantity+t.quantity,active=TRUE,updated_at=NOW()
+        FROM totals t WHERE l.id=t.listing_id
+        RETURNING l.id
+      )
+      UPDATE payments p SET status='failed',updated_at=NOW()
+      WHERE p.order_id IN (SELECT id FROM stale)
+    `;
+  }catch(e){console.warn('Legacy checkout recovery skipped',e)}
+}
+
 export default async(req:Request)=>{
  const url=new URL(req.url);const p=url.pathname.replace(/^\/api\/marketplace/,'')||'/';
  try{
   await ensureMarketplaceSchema();
   const db=getMarketplaceDatabase();
+  await recoverLegacyAbandonedCheckouts(db);
 
   if(req.method==='GET'&&p==='/health')return json({ok:true,database:'netlify',schema:'ready',connection:'available'});
 
@@ -82,10 +111,8 @@ export default async(req:Request)=>{
     if(!process.env.STRIPE_SECRET_KEY)return json({error:'Stripe is not configured'},503);
     const b=await body(req);const qty=Math.max(1,Math.floor(Number(b.quantity||1)));const name=String(b.name||'').trim();const email=String(b.email||'').trim().toLowerCase();const phone=String(b.phone||'').trim();const address=b.shippingAddress||{};
     if(name.length<2||!validEmail(email)||!String(address.line1||'').trim()||!String(address.city||'').trim()||!String(address.state||'').trim()||!String(address.postalCode||'').trim()||!String(address.country||'').trim())return json({error:'Valid buyer name, email and complete shipping address are required'},400);
-    const rows=await db.sql`SELECT l.*,s.display_name FROM listings l JOIN sellers s ON s.id=l.seller_id WHERE l.id=${String(b.listingId||'')} AND l.active=TRUE AND l.approved=TRUE AND s.active=TRUE`;
-    const l=rows[0];if(!l)return json({error:'Listing unavailable'},409);
-    const reserved=await db.sql`UPDATE listings SET quantity=quantity-${qty},active=CASE WHEN quantity-${qty}<=0 THEN FALSE ELSE active END,updated_at=NOW() WHERE id=${l.id} AND active=TRUE AND quantity>=${qty} RETURNING quantity`;
-    if(!reserved[0])return json({error:'Listing unavailable or insufficient quantity'},409);
+    const rows=await db.sql`SELECT l.*,s.display_name FROM listings l JOIN sellers s ON s.id=l.seller_id WHERE l.id=${String(b.listingId||'')} AND l.active=TRUE AND l.approved=TRUE AND l.quantity>=${qty} AND s.active=TRUE`;
+    const l=rows[0];if(!l)return json({error:'Listing unavailable or insufficient quantity'},409);
     const [setting]=await db.sql`SELECT value FROM admin_settings WHERE key='platform_fee_percent'`;const feePct=Number(setting?.value||process.env.PLATFORM_FEE_PERCENT||10);const gross=l.price_cents*qty,fee=Math.round(gross*feePct/100),payout=gross-fee;
     let order:any;
     try{
@@ -94,7 +121,7 @@ export default async(req:Request)=>{
       const sr=await fetch('https://api.stripe.com/v1/checkout/sessions',{method:'POST',headers:{Authorization:`Bearer ${process.env.STRIPE_SECRET_KEY}`,'Content-Type':'application/x-www-form-urlencoded'},body:form});const session=await sr.json() as any;
       if(!sr.ok)throw new Error(session.error?.message||'Stripe checkout failed');
       await db.sql`UPDATE orders SET stripe_session_id=${session.id} WHERE id=${order.id}`;await db.sql`INSERT INTO payments(order_id,provider_session_id,amount_cents,status) VALUES(${order.id},${session.id},${gross},'pending')`;return json({url:session.url,orderId:order.id})
-    }catch(e:any){await db.sql`UPDATE listings SET quantity=quantity+${qty},active=TRUE,updated_at=NOW() WHERE id=${l.id}`;if(order?.id)await db.sql`UPDATE orders SET payment_status='failed',updated_at=NOW() WHERE id=${order.id}`;return json({error:e?.message||'Stripe checkout failed'},502)}
+    }catch(e:any){if(order?.id)await db.sql`UPDATE orders SET payment_status='failed',updated_at=NOW() WHERE id=${order.id}`;return json({error:e?.message||'Stripe checkout failed'},502)}
   }
 
   if(req.method==='GET'&&p==='/admin/overview'){
