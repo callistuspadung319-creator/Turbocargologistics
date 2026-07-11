@@ -1,5 +1,4 @@
 import type { Config } from '@netlify/functions';
-import { ensureMarketplaceSchema } from './_ensure-schema';
 import { getMarketplaceDatabase } from './_database';
 
 const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{
@@ -11,7 +10,6 @@ const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{
 export default async(req:Request)=>{
   if(req.method!=='GET')return json({error:'Method not allowed'},405);
   try{
-    await ensureMarketplaceSchema();
     const db=getMarketplaceDatabase();
     const url=new URL(req.url);
     const q=`%${String(url.searchParams.get('q')||'').trim()}%`;
@@ -21,10 +19,7 @@ export default async(req:Request)=>{
         (SELECT i.url FROM listing_images i WHERE i.listing_id=l.id ORDER BY i.sort_order ASC LIMIT 1) image_url
       FROM listings l
       JOIN sellers s ON s.id=l.seller_id
-      WHERE COALESCE(l.active,TRUE)=TRUE
-        AND COALESCE(l.approved,TRUE)=TRUE
-        AND COALESCE(l.quantity,0)>0
-        AND COALESCE(s.active,TRUE)=TRUE
+      WHERE COALESCE(l.quantity,0)>0
         AND (COALESCE(l.title,'') ILIKE ${q} OR COALESCE(l.description,'') ILIKE ${q})
         AND (${category}='' OR l.category=${category})
       ORDER BY l.created_at DESC
