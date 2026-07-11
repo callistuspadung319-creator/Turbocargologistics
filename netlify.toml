@@ -5,8 +5,25 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
-# New canonical buyer feed URL. This path has never been cached by older mobile
-# browsers, so it bypasses stale /marketplace documents immediately.
+# One canonical marketplace document for every buyer entry URL.
+[[redirects]]
+  from = "/"
+  to = "/market/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/market"
+  to = "/market/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/market/"
+  to = "/market/index.html"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/marketplace-live"
   to = "/market/index.html"
@@ -19,39 +36,31 @@
   status = 200
   force = true
 
-# Old buyer URLs now perform real redirects to the fresh canonical URL.
 [[redirects]]
   from = "/marketplace"
-  to = "/marketplace-live"
-  status = 302
+  to = "/market/index.html"
+  status = 200
   force = true
 
 [[redirects]]
   from = "/marketplace/"
-  to = "/marketplace-live"
-  status = 302
-  force = true
-
-[[redirects]]
-  from = "/"
-  to = "/marketplace-live"
-  status = 302
+  to = "/market/index.html"
+  status = 200
   force = true
 
 [[redirects]]
   from = "/browse"
-  to = "/marketplace-live"
-  status = 302
+  to = "/market/index.html"
+  status = 200
   force = true
 
-# Canonical listing page with guest Stripe checkout.
+# Canonical listing page.
 [[redirects]]
   from = "/listing/*"
   to = "/item/index.html?id=:splat"
   status = 200
   force = true
 
-# Legacy item URLs remain supported.
 [[redirects]]
   from = "/item/*"
   to = "/item/index.html?id=:splat"
@@ -94,11 +103,13 @@
   status = 200
   force = true
 
+# Remaining authentication, seller storefront and admin routes use the SPA.
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
+# Dynamic pages and APIs must never be served stale.
 [[headers]]
   for = "/"
   [headers.values]
@@ -107,25 +118,16 @@
     Expires = "0"
 
 [[headers]]
-  for = "/marketplace*"
+  for = "/market*"
   [headers.values]
     Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
     Pragma = "no-cache"
     Expires = "0"
 
 [[headers]]
-  for = "/market/index.html"
+  for = "/browse"
   [headers.values]
     Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
-    Pragma = "no-cache"
-    Expires = "0"
-
-[[headers]]
-  for = "/market/*"
-  [headers.values]
-    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
-    Pragma = "no-cache"
-    Expires = "0"
 
 [[headers]]
   for = "/sell*"
@@ -152,26 +154,11 @@
     Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
 
 [[headers]]
-  for = "/api/cards*"
+  for = "/api/*"
   [headers.values]
     Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
     Pragma = "no-cache"
     Expires = "0"
-
-[[headers]]
-  for = "/api/marketplace*"
-  [headers.values]
-    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
-
-[[headers]]
-  for = "/api/seller-tools*"
-  [headers.values]
-    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
-
-[[headers]]
-  for = "/api/listing-delete/*"
-  [headers.values]
-    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
 
 [[headers]]
   for = "/*"
