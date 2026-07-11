@@ -5,6 +5,20 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
+# Buyer marketplace homepage.
+[[redirects]]
+  from = "/"
+  to = "/market/index.html"
+  status = 200
+  force = true
+
+# Dedicated listing page with guest Stripe checkout.
+[[redirects]]
+  from = "/listing/*"
+  to = "/item/index.html?id=:splat"
+  status = 200
+  force = true
+
 # Dedicated seller pages must be resolved before the SPA fallback.
 [[redirects]]
   from = "/sell"
