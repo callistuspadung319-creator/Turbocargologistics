@@ -1,6 +1,5 @@
 import type { Config } from '@netlify/functions';
 import { createHash } from 'node:crypto';
-import { ensureMarketplaceSchema } from './_ensure-schema';
 import { getMarketplaceDatabase } from './_database';
 
 const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{
@@ -29,7 +28,6 @@ async function currentSeller(req:Request){
 export default async(req:Request)=>{
   if(req.method!=='GET')return json({error:'Method not allowed'},405);
   try{
-    await ensureMarketplaceSchema();
     const db=getMarketplaceDatabase();
     const user=await currentSeller(req);
     if(!user)return json({error:'Login required'},401);
