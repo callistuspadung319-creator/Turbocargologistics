@@ -1,5 +1,5 @@
 import type { Config } from '@netlify/functions';
-import { getMarketplaceDatabase } from './_database';
+import { getDatabase } from '@netlify/database';
 
 const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{
   'Cache-Control':'no-store, no-cache, must-revalidate, max-age=0',
@@ -18,12 +18,11 @@ export default async(req:Request)=>{
   if(req.method!=='GET')return json({error:'Method not allowed'},405);
 
   try{
-    const db=getMarketplaceDatabase();
+    const db=getDatabase();
     const url=new URL(req.url);
     const q=`%${String(url.searchParams.get('q')||'').trim()}%`;
     const category=String(url.searchParams.get('category')||'').trim();
 
-    // Keep this endpoint deliberately small: one query, one connection path.
     const rows=await withTimeout(db.sql`
       SELECT
         l.id,l.seller_id,l.title,l.slug,l.description,l.category,l.condition,
@@ -39,7 +38,6 @@ export default async(req:Request)=>{
       LIMIT 500
     `,8000,'Marketplace database query');
 
-    console.log('cards endpoint returned',{count:Array.isArray(rows)?rows.length:0});
     return json({ok:true,items:Array.isArray(rows)?rows:[],count:Array.isArray(rows)?rows.length:0});
   }catch(e:any){
     const detail=e?.message||String(e);
