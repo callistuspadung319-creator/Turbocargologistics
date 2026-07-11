@@ -19,6 +19,19 @@
   status = 200
   force = true
 
+# Stripe return pages.
+[[redirects]]
+  from = "/checkout/success"
+  to = "/checkout/success/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/checkout/cancel"
+  to = "/checkout/cancel/index.html"
+  status = 200
+  force = true
+
 # Dedicated seller pages must be resolved before the SPA fallback.
 [[redirects]]
   from = "/sell"
