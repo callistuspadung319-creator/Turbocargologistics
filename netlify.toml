@@ -5,21 +5,24 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
-# Buyer marketplace homepage.
 [[redirects]]
   from = "/"
   to = "/market/index.html"
   status = 200
   force = true
 
-# Dedicated listing page with guest Stripe checkout.
 [[redirects]]
   from = "/listing/*"
   to = "/item/index.html?id=:splat"
   status = 200
   force = true
 
-# Stripe return pages.
+[[redirects]]
+  from = "/item/*"
+  to = "/item/index.html?id=:splat"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/checkout/success"
   to = "/checkout/success/index.html"
@@ -32,7 +35,6 @@
   status = 200
   force = true
 
-# Dedicated seller pages must be resolved before the SPA fallback.
 [[redirects]]
   from = "/sell"
   to = "/sell/index.html"
@@ -62,23 +64,42 @@
   to = "/index.html"
   status = 200
 
-# Never serve an old scanner or stale comps response.
 [[headers]]
-  for = "/sell"
+  for = "/sell*"
   [headers.values]
     Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
     Pragma = "no-cache"
     Expires = "0"
 
 [[headers]]
-  for = "/sell/*"
+  for = "/seller/dashboard*"
   [headers.values]
     Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
     Pragma = "no-cache"
     Expires = "0"
 
 [[headers]]
-  for = "/api/seller-tools/*"
+  for = "/listing/*"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+
+[[headers]]
+  for = "/item/*"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+
+[[headers]]
+  for = "/api/marketplace*"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+
+[[headers]]
+  for = "/api/seller-tools*"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+
+[[headers]]
+  for = "/api/listing-delete/*"
   [headers.values]
     Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
 
