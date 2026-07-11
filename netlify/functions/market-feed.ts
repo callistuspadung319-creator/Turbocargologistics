@@ -20,7 +20,6 @@ export default async(req:Request)=>{
     const limit=Math.min(24,Math.max(4,Number(url.searchParams.get('limit')||12)));
     const offset=Math.max(0,Number(url.searchParams.get('offset')||0));
     const like=`%${q}%`;
-    const order=sort==='low'?'l.price_cents ASC':sort==='high'?'l.price_cents DESC':'l.created_at DESC';
 
     const [totalRow]=await db.sql`
       SELECT COUNT(*)::int total
@@ -30,18 +29,37 @@ export default async(req:Request)=>{
         AND (${category}='' OR l.category=${category})
     `;
 
-    const rows=await db.sql.unsafe(`
-      SELECT l.id,l.title,l.slug,l.description,l.category,l.condition,l.price_cents,l.quantity,l.created_at,
-             s.display_name,s.username,
-             (SELECT i.url FROM listing_images i WHERE i.listing_id=l.id ORDER BY i.sort_order LIMIT 1) image_url
-      FROM listings l JOIN sellers s ON s.id=l.seller_id
-      WHERE l.active=TRUE AND l.approved=TRUE AND l.quantity>0 AND s.active=TRUE
-        AND ($1='' OR l.title ILIKE $2 OR l.description ILIKE $2)
-        AND ($3='' OR l.category=$3)
-      ORDER BY ${order}
-      LIMIT $4 OFFSET $5
-    `,[q,like,category,limit,offset]);
+    const base=async(order:'new'|'low'|'high')=>{
+      if(order==='low')return db.sql`
+        SELECT l.id,l.title,l.slug,l.description,l.category,l.condition,l.price_cents,l.quantity,l.created_at,
+               s.display_name,s.username,
+               (SELECT i.url FROM listing_images i WHERE i.listing_id=l.id ORDER BY i.sort_order LIMIT 1) image_url
+        FROM listings l JOIN sellers s ON s.id=l.seller_id
+        WHERE l.active=TRUE AND l.approved=TRUE AND l.quantity>0 AND s.active=TRUE
+          AND (${q}='' OR l.title ILIKE ${like} OR l.description ILIKE ${like})
+          AND (${category}='' OR l.category=${category})
+        ORDER BY l.price_cents ASC LIMIT ${limit} OFFSET ${offset}`;
+      if(order==='high')return db.sql`
+        SELECT l.id,l.title,l.slug,l.description,l.category,l.condition,l.price_cents,l.quantity,l.created_at,
+               s.display_name,s.username,
+               (SELECT i.url FROM listing_images i WHERE i.listing_id=l.id ORDER BY i.sort_order LIMIT 1) image_url
+        FROM listings l JOIN sellers s ON s.id=l.seller_id
+        WHERE l.active=TRUE AND l.approved=TRUE AND l.quantity>0 AND s.active=TRUE
+          AND (${q}='' OR l.title ILIKE ${like} OR l.description ILIKE ${like})
+          AND (${category}='' OR l.category=${category})
+        ORDER BY l.price_cents DESC LIMIT ${limit} OFFSET ${offset}`;
+      return db.sql`
+        SELECT l.id,l.title,l.slug,l.description,l.category,l.condition,l.price_cents,l.quantity,l.created_at,
+               s.display_name,s.username,
+               (SELECT i.url FROM listing_images i WHERE i.listing_id=l.id ORDER BY i.sort_order LIMIT 1) image_url
+        FROM listings l JOIN sellers s ON s.id=l.seller_id
+        WHERE l.active=TRUE AND l.approved=TRUE AND l.quantity>0 AND s.active=TRUE
+          AND (${q}='' OR l.title ILIKE ${like} OR l.description ILIKE ${like})
+          AND (${category}='' OR l.category=${category})
+        ORDER BY l.created_at DESC LIMIT ${limit} OFFSET ${offset}`;
+    };
 
+    const rows=await base(sort==='low'?'low':sort==='high'?'high':'new');
     const total=Number(totalRow?.total||0);
     return json({ok:true,items:rows,total,offset,limit,hasMore:offset+rows.length<total});
   }catch(e:any){
