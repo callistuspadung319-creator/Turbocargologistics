@@ -88,7 +88,28 @@
   status = 200
 
 [[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+    Pragma = "no-cache"
+    Expires = "0"
+
+[[headers]]
   for = "/marketplace*"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+    Pragma = "no-cache"
+    Expires = "0"
+
+[[headers]]
+  for = "/market/index.html"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+    Pragma = "no-cache"
+    Expires = "0"
+
+[[headers]]
+  for = "/market/*"
   [headers.values]
     Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
     Pragma = "no-cache"
@@ -122,6 +143,8 @@
   for = "/api/cards*"
   [headers.values]
     Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+    Pragma = "no-cache"
+    Expires = "0"
 
 [[headers]]
   for = "/api/marketplace*"
