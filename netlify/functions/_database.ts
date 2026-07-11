@@ -3,9 +3,9 @@ import { getDatabase } from '@netlify/database';
 /**
  * Return the marketplace database connection.
  *
- * Netlify's attached database is the source of truth for production. A legacy
- * DATABASE_URL may still exist from an older deployment, so it must not win
- * over NETLIFY_DB_URL or NETLIFY_DATABASE_URL.
+ * Netlify's attached database is the production source of truth. Older
+ * deployments may still expose DATABASE_URL, so synchronize the environment
+ * names before calling the Netlify SDK using its supported no-argument form.
  */
 export function getMarketplaceDatabase() {
   const connectionString =
@@ -19,9 +19,8 @@ export function getMarketplaceDatabase() {
     );
   }
 
-  // Keep both names synchronized for packages that read one specific key.
   process.env.NETLIFY_DB_URL = connectionString;
   process.env.DATABASE_URL = connectionString;
 
-  return getDatabase({ connectionString } as any);
+  return getDatabase();
 }
