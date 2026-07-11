@@ -16,9 +16,9 @@
 <body class="text-slate-900">
 <header class="sticky top-0 z-30 bg-white border-b">
   <div class="max-w-7xl mx-auto px-4 min-h-16 py-3 flex items-center justify-between gap-3">
-    <a href="/marketplace" class="text-2xl sm:text-3xl font-black text-blue-700">TurboMarket</a>
+    <a href="/marketplace-live" class="text-2xl sm:text-3xl font-black text-blue-700">TurboMarket</a>
     <nav class="flex flex-wrap justify-end items-center gap-3 text-sm sm:text-base">
-      <a href="/marketplace" class="font-bold text-blue-700">Browse</a>
+      <a href="/marketplace-live" class="font-bold text-blue-700">Browse</a>
       <a href="/sell" class="font-semibold">Sell</a>
       <a href="/seller/dashboard" class="font-semibold">Dashboard</a>
       <a href="/login" class="bg-slate-900 text-white px-3 py-2 rounded-lg">Login</a>
@@ -61,8 +61,8 @@
 <script>
 (()=>{
   'use strict';
-  const CACHE_KEY='turbomarket.marketplace.cards.v2';
-  const OLD_CACHE_KEYS=['turbomarket.marketplace.cards.v1'];
+  const CACHE_KEY='turbomarket.marketplace.cards.v3';
+  const OLD_CACHE_KEYS=['turbomarket.marketplace.cards.v1','turbomarket.marketplace.cards.v2'];
   const CACHE_TTL=30000;
   const REQUEST_TIMEOUT=8000;
   const state={cards:[],loading:false,failures:0,nextRetryAt:0,controller:null};
