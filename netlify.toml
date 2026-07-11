@@ -5,18 +5,34 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
+# Canonical buyer marketplace feed.
+[[redirects]]
+  from = "/marketplace"
+  to = "/market/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/marketplace/"
+  to = "/market/index.html"
+  status = 200
+  force = true
+
+# Keep the domain root buyer-first.
 [[redirects]]
   from = "/"
   to = "/market/index.html"
   status = 200
   force = true
 
+# Canonical listing page with guest Stripe checkout.
 [[redirects]]
   from = "/listing/*"
   to = "/item/index.html?id=:splat"
   status = 200
   force = true
 
+# Legacy item URLs remain supported.
 [[redirects]]
   from = "/item/*"
   to = "/item/index.html?id=:splat"
@@ -63,6 +79,13 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+[[headers]]
+  for = "/marketplace*"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+    Pragma = "no-cache"
+    Expires = "0"
 
 [[headers]]
   for = "/sell*"
