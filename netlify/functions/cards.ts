@@ -7,6 +7,13 @@ const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{
   Expires:'0'
 }});
 
+function withTimeout<T>(promise:Promise<T>,milliseconds:number,label:string):Promise<T>{
+  return Promise.race([
+    promise,
+    new Promise<T>((_,reject)=>setTimeout(()=>reject(new Error(`${label} timed out after ${milliseconds}ms`)),milliseconds))
+  ]);
+}
+
 export default async(req:Request)=>{
   if(req.method!=='GET')return json({error:'Method not allowed'},405);
 
@@ -16,14 +23,8 @@ export default async(req:Request)=>{
     const q=`%${String(url.searchParams.get('q')||'').trim()}%`;
     const category=String(url.searchParams.get('category')||'').trim();
 
-    const [diagnostics]=await db.sql`
-      SELECT
-        (SELECT COUNT(*)::int FROM listings) total_listings,
-        (SELECT COUNT(*)::int FROM listings WHERE COALESCE(quantity,0)>0) available_listings,
-        (SELECT COUNT(*)::int FROM sellers) total_sellers
-    `;
-
-    const rows=await db.sql`
+    // Keep this endpoint deliberately small: one query, one connection path.
+    const rows=await withTimeout(db.sql`
       SELECT
         l.id,l.seller_id,l.title,l.slug,l.description,l.category,l.condition,
         l.price_cents,l.quantity,l.active,l.approved,l.created_at,l.updated_at,
@@ -35,34 +36,22 @@ export default async(req:Request)=>{
         AND (COALESCE(l.title,'') ILIKE ${q} OR COALESCE(l.description,'') ILIKE ${q})
         AND (${category}='' OR l.category=${category})
       ORDER BY l.created_at DESC
-    `;
+      LIMIT 500
+    `,8000,'Marketplace database query');
 
-    console.log('cards endpoint result',{
-      totalListings:Number(diagnostics?.total_listings||0),
-      availableListings:Number(diagnostics?.available_listings||0),
-      totalSellers:Number(diagnostics?.total_sellers||0),
-      returned:rows.length
-    });
-
-    return json({
-      ok:true,
-      items:Array.isArray(rows)?rows:[],
-      count:Array.isArray(rows)?rows.length:0,
-      diagnostics:{
-        totalListings:Number(diagnostics?.total_listings||0),
-        availableListings:Number(diagnostics?.available_listings||0),
-        totalSellers:Number(diagnostics?.total_sellers||0)
-      }
-    });
+    console.log('cards endpoint returned',{count:Array.isArray(rows)?rows.length:0});
+    return json({ok:true,items:Array.isArray(rows)?rows:[],count:Array.isArray(rows)?rows.length:0});
   }catch(e:any){
+    const detail=e?.message||String(e);
     console.error('Cards endpoint failed',e);
     return json({
       ok:false,
       items:[],
       count:0,
-      error:'Could not load seller cards',
-      detail:e?.message||String(e)
-    },500);
+      error:'Marketplace database is unavailable',
+      detail,
+      databaseConfigured:Boolean(process.env.NETLIFY_DB_URL||process.env.NETLIFY_DATABASE_URL||process.env.DATABASE_URL)
+    },503);
   }
 };
 
