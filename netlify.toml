@@ -18,11 +18,18 @@
   status = 200
   force = true
 
-# Keep the domain root buyer-first.
+# Send the domain root to the canonical marketplace URL. Use a real redirect,
+# not an internal rewrite, so the legacy React homepage can never handle '/'.
 [[redirects]]
   from = "/"
-  to = "/market/index.html"
-  status = 200
+  to = "/marketplace"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "/browse"
+  to = "/marketplace"
+  status = 302
   force = true
 
 # Canonical listing page with guest Stripe checkout.
@@ -108,6 +115,11 @@
 
 [[headers]]
   for = "/item/*"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+
+[[headers]]
+  for = "/api/cards*"
   [headers.values]
     Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
 
