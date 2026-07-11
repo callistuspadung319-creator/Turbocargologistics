@@ -1,5 +1,5 @@
 import type { Config } from '@netlify/functions';
-import { getMarketplaceDatabase } from './_database';
+import { getDatabase } from '@netlify/database';
 
 function withTimeout<T>(promise:Promise<T>,milliseconds:number):Promise<T>{
   return Promise.race([
@@ -11,7 +11,7 @@ function withTimeout<T>(promise:Promise<T>,milliseconds:number):Promise<T>{
 export default async () => {
   const started=Date.now();
   try {
-    const db=getMarketplaceDatabase();
+    const db=getDatabase();
     const rows=await withTimeout(db.sql`SELECT COUNT(*)::int listing_count FROM listings`,5000);
     return Response.json({
       ok:true,
