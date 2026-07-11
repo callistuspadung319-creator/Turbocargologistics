@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Browse Marketplace | TurboMarket</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -58,7 +61,8 @@
 <script>
 (()=>{
   'use strict';
-  const CACHE_KEY='turbomarket.marketplace.cards.v1';
+  const CACHE_KEY='turbomarket.marketplace.cards.v2';
+  const OLD_CACHE_KEYS=['turbomarket.marketplace.cards.v1'];
   const CACHE_TTL=30000;
   const REQUEST_TIMEOUT=8000;
   const state={cards:[],loading:false,failures:0,nextRetryAt:0,controller:null};
@@ -67,16 +71,23 @@
   const money=cents=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((Number(cents)||0)/100);
   const safeCards=value=>Array.isArray(value)?value.filter(row=>row&&row.id):[];
 
+  for(const key of OLD_CACHE_KEYS){try{localStorage.removeItem(key)}catch{}}
+
   function readCache(){
     try{
       const parsed=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');
       if(!parsed||!Array.isArray(parsed.items)||!Number.isFinite(parsed.savedAt))return null;
-      return {items:safeCards(parsed.items),savedAt:parsed.savedAt,fresh:Date.now()-parsed.savedAt<CACHE_TTL};
+      const items=safeCards(parsed.items);
+      if(!items.length){localStorage.removeItem(CACHE_KEY);return null;}
+      return {items,savedAt:parsed.savedAt,fresh:Date.now()-parsed.savedAt<CACHE_TTL};
     }catch(error){console.warn('Marketplace cache read failed',error);return null}
   }
   function writeCache(items){
-    try{localStorage.setItem(CACHE_KEY,JSON.stringify({items:safeCards(items),savedAt:Date.now()}))}
-    catch(error){console.warn('Marketplace cache write failed',error)}
+    try{
+      const safe=safeCards(items);
+      if(!safe.length){localStorage.removeItem(CACHE_KEY);return;}
+      localStorage.setItem(CACHE_KEY,JSON.stringify({items:safe,savedAt:Date.now()}));
+    }catch(error){console.warn('Marketplace cache write failed',error)}
   }
   function shuffled(rows){
     const copy=Array.isArray(rows)?rows.slice():[];
@@ -123,21 +134,22 @@
   async function load({force=false}={}){
     if(state.loading)return;
     const cached=readCache();
-    if(!force&&cached?.fresh){state.cards=cached.items;render();showNotice('Showing recently loaded marketplace cards.');return}
+    if(!force&&cached?.fresh&&cached.items.length){state.cards=cached.items;render();showNotice('Showing recently loaded marketplace cards while checking for updates.');}
     if(Date.now()<state.nextRetryAt){updateRefreshButton();return}
-    state.loading=true;updateRefreshButton();$('error').classList.add('hidden');$('notice').classList.add('hidden');skeleton();
+    state.loading=true;updateRefreshButton();$('error').classList.add('hidden');skeleton();
     if(state.controller)state.controller.abort();
     state.controller=new AbortController();
     const timeout=setTimeout(()=>state.controller.abort(),REQUEST_TIMEOUT);
     try{
-      const response=await fetch('/api/cards?ts='+Date.now(),{cache:'no-store',credentials:'include',signal:state.controller.signal,headers:{Accept:'application/json','Cache-Control':'no-cache'}});
+      const response=await fetch('/api/cards?ts='+Date.now(),{cache:'no-store',credentials:'include',signal:state.controller.signal,headers:{Accept:'application/json','Cache-Control':'no-store, no-cache, must-revalidate','Pragma':'no-cache'}});
       const text=await response.text();
       let payload=null;
       try{payload=text?JSON.parse(text):null}catch{throw new Error(`API returned invalid JSON (${response.status})`)}
       console.log('Fetched cards payload:',payload);
       if(!response.ok)throw new Error(payload?.detail||payload?.error||`Cards request failed (${response.status})`);
       if(!payload||!Array.isArray(payload.items))throw new Error('Cards API returned an invalid payload');
-      state.cards=safeCards(payload.items);state.failures=0;state.nextRetryAt=0;writeCache(state.cards);render();
+      const liveCards=safeCards(payload.items);
+      state.cards=liveCards;state.failures=0;state.nextRetryAt=0;writeCache(liveCards);$('notice').classList.add('hidden');render();
     }catch(error){
       console.error('Database fetch failed:',error);
       state.failures+=1;state.nextRetryAt=Date.now()+cooldownMs();
@@ -152,12 +164,12 @@
   $('category').addEventListener('change',render);
   $('sort').addEventListener('change',render);
   $('refresh').addEventListener('click',()=>load({force:true}));
-  window.addEventListener('pageshow',event=>{if(event.persisted&&state.cards.length)render()});
+  window.addEventListener('pageshow',event=>{if(event.persisted)load({force:true});else if(state.cards.length)render()});
   window.addEventListener('error',event=>console.error('TurboMarket runtime error',event.error||event.message));
   window.addEventListener('unhandledrejection',event=>console.error('TurboMarket unhandled rejection',event.reason));
   const cached=readCache();
-  if(cached?.items?.length){state.cards=cached.items;render();if(!cached.fresh)showNotice('Showing saved cards while TurboMarket checks for updates.');}
-  load();
+  if(cached?.items?.length){state.cards=cached.items;render();showNotice('Showing saved cards while TurboMarket checks for updates.');}
+  load({force:true});
 })();
 </script>
 </body>
