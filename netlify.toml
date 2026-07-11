@@ -79,15 +79,16 @@
   status = 200
   force = true
 
+# Rebuilt seller scanner and independent comps workflow.
 [[redirects]]
   from = "/sell"
-  to = "/sell/index.html"
+  to = "/sell-v2/index.html"
   status = 200
   force = true
 
 [[redirects]]
   from = "/sell/"
-  to = "/sell/index.html"
+  to = "/sell-v2/index.html"
   status = 200
   force = true
 
