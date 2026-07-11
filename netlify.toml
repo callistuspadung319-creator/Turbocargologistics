@@ -5,30 +5,42 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
-# Canonical buyer marketplace feed.
+# New canonical buyer feed URL. This path has never been cached by older mobile
+# browsers, so it bypasses stale /marketplace documents immediately.
 [[redirects]]
-  from = "/marketplace"
+  from = "/marketplace-live"
   to = "/market/index.html"
   status = 200
+  force = true
+
+[[redirects]]
+  from = "/marketplace-live/"
+  to = "/market/index.html"
+  status = 200
+  force = true
+
+# Old buyer URLs now perform real redirects to the fresh canonical URL.
+[[redirects]]
+  from = "/marketplace"
+  to = "/marketplace-live"
+  status = 302
   force = true
 
 [[redirects]]
   from = "/marketplace/"
-  to = "/market/index.html"
-  status = 200
+  to = "/marketplace-live"
+  status = 302
   force = true
 
-# Send the domain root to the canonical marketplace URL. Use a real redirect,
-# not an internal rewrite, so the legacy React homepage can never handle '/'.
 [[redirects]]
   from = "/"
-  to = "/marketplace"
+  to = "/marketplace-live"
   status = 302
   force = true
 
 [[redirects]]
   from = "/browse"
-  to = "/marketplace"
+  to = "/marketplace-live"
   status = 302
   force = true
 
